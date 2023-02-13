@@ -24,4 +24,4 @@ jobs:
         run: go mod verify
 
       - name: Build
-        run: go build -v ./...
+        run: go build -v main.go
