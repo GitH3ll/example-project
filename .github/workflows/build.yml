@@ -1,11 +1,11 @@
-name: Build
-
+name: build
 on:
   push:
-    branches: [master]
-  branches:
-    - master
-    - main
+    tags:
+      - v*
+    branches:
+      - master
+      - main
   pull_request:
 
 jobs:
