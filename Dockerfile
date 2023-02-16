@@ -8,7 +8,7 @@ RUN mkdir /app
 ADD . /app
 WORKDIR /app
 ## We want to build our application's binary executable
-RUN CGO_ENABLED=0 GOOS=linux go build -o main ./...
+RUN CGO_ENABLED=0 GOOS=linux go build -o main ./main.go
 
 ## the lightweight scratch image we'll
 ## run our application within
