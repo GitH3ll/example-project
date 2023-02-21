@@ -1,10 +1,14 @@
 package service
 
-import "github.com/GitH3ll/example-project/internal/model"
+import (
+	"context"
+	"github.com/GitH3ll/example-project/internal/model"
+)
 
 type repository interface {
-	AddUser(user model.User) error
-	GetUser(id int) (model.User, error)
+	AddUser(ctx context.Context, user model.User) error
+	GetUser(ctx context.Context, id int64) (model.User, error)
+	UpdateUser(ctx context.Context, modelUser model.User) error
 }
 
 type Controller struct {
@@ -17,10 +21,14 @@ func NewController(repo repository) *Controller {
 	}
 }
 
-func (c *Controller) AddUser(user model.User) error {
-	return c.repo.AddUser(user)
+func (c *Controller) AddUser(ctx context.Context, user model.User) error {
+	return c.repo.AddUser(ctx, user)
 }
 
-func (c *Controller) GetUser(id int) (model.User, error) {
-	return c.repo.GetUser(id)
+func (c *Controller) GetUser(ctx context.Context, id int64) (model.User, error) {
+	return c.repo.GetUser(ctx, id)
+}
+
+func (c *Controller) UpdateUser(ctx context.Context, user model.User) error {
+	return c.repo.UpdateUser(ctx, user)
 }

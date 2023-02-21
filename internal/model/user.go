@@ -2,6 +2,9 @@ package model
 
 // nolint: unused
 type User struct {
-	ID   int
-	Name string
+	ID          int64
+	Name        string
+	Login       string
+	Password    string
+	Description string
 }
