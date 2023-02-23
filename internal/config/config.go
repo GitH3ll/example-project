@@ -3,7 +3,9 @@ package config
 import "github.com/kelseyhightower/envconfig"
 
 type Config struct {
-	DB *DB `envconfig:"db"`
+	JWTKeyword string `envconfig:"jwt_keyword"`
+	DB         *DB    `envconfig:"db"`
+	Minio      Minio  `envconfig:"minio"`
 }
 
 type DB struct {
@@ -12,6 +14,13 @@ type DB struct {
 	User     string `envconfig:"user"`
 	Name     string `envconfig:"name"`
 	SSLMode  string `envconfig:"sslmode"`
+}
+
+type Minio struct {
+	KeyID     string `envconfig:"key_id"`
+	SecretKey string `envconfig:"secret_key"`
+	Endpoint  string `envconfig:"endpoint"`
+	Bucket    string `envconfig:"bucket"`
 }
 
 func (c *Config) Process() error {

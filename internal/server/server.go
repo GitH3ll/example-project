@@ -3,7 +3,10 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/GitH3ll/example-project/internal/config"
+	"github.com/GitH3ll/example-project/internal/middleware"
 	"github.com/GitH3ll/example-project/internal/model"
+	"github.com/GitH3ll/example-project/internal/response"
 	"github.com/go-chi/chi"
 	"github.com/sirupsen/logrus"
 	"io"
@@ -23,6 +26,9 @@ type controller interface {
 	AddUser(ctx context.Context, user model.User) error
 	GetUser(ctx context.Context, id int64) (model.User, error)
 	UpdateUser(ctx context.Context, modelUser model.User) error
+	DeleteUser(ctx context.Context, id int64) error
+	Authorize(ctx context.Context, login, password string) (string, error)
+	AddFile(ctx context.Context, filename string, file io.Reader) error
 }
 
 type Server struct {
@@ -30,21 +36,33 @@ type Server struct {
 	logger    *logrus.Logger
 	r         chi.Router
 	c         controller
+	cfg       *config.Config
 }
 
-func NewServer(listenURI string, logger *logrus.Logger, c controller) *Server {
+func NewServer(listenURI string, logger *logrus.Logger, c controller, cfg *config.Config) *Server {
 	return &Server{
 		listenURI: listenURI,
 		logger:    logger,
 		r:         chi.NewRouter(),
 		c:         c,
+		cfg:       cfg,
 	}
 }
 
 func (s *Server) RegisterRoutes() {
-	s.r.Get("/user/{userID}", s.HandleGetUser)
+	s.r.Use(middleware.Logger(s.logger))
+
+	s.r.Get("/user/auth", s.HandleAuthorize)
 	s.r.Post("/user/add", s.HandleAddUser)
-	s.r.Put("/user/update", s.HandleUpdateUser)
+	s.r.Post("/image/add", s.HandleAddFile)
+
+	s.r.Group(func(r chi.Router) {
+		r.Use(middleware.Auth(s.cfg.JWTKeyword, s.logger))
+
+		r.Get("/user/{userID}", s.HandleGetUser)
+		r.Put("/user/update", s.HandleUpdateUser)
+		r.Delete("/user/{userID}", s.HandleDeleteUser)
+	})
 }
 
 func (s *Server) StartServer() {
@@ -57,6 +75,42 @@ func (s *Server) StartServer() {
 	err := srv.ListenAndServe()
 	if err != nil {
 		s.logger.Fatal(err)
+	}
+}
+
+func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
+	var user User
+
+	err := json.NewDecoder(r.Body).Decode(&user)
+	if err != nil {
+		s.handleError(err, http.StatusBadRequest, w)
+		return
+	}
+
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			s.logger.Error(err)
+		}
+	}(r.Body)
+
+	token, err := s.c.Authorize(r.Context(), user.Login, user.Password)
+	if err != nil {
+		s.handleError(err, http.StatusInternalServerError, w)
+		return
+	}
+
+	b, err := response.ParseResponse(token, false)
+	if err != nil {
+		s.handleError(err, http.StatusInternalServerError, w)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(b)
+	if err != nil {
+		s.handleError(err, http.StatusInternalServerError, w)
+		return
 	}
 }
 
@@ -113,13 +167,22 @@ func (s *Server) HandleGetUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleError(err error, status int, w http.ResponseWriter) {
-	s.logger.Error(err)
-	w.WriteHeader(status)
-	_, err = w.Write([]byte(err.Error()))
+func (s *Server) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "userID")
+
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		s.logger.Error(err)
+		s.handleError(err, http.StatusBadRequest, w)
+		return
 	}
+
+	err = s.c.DeleteUser(r.Context(), id)
+	if err != nil {
+		s.handleError(err, http.StatusInternalServerError, w)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) HandleUpdateUser(w http.ResponseWriter, r *http.Request) {
@@ -145,6 +208,35 @@ func (s *Server) HandleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) HandleAddFile(w http.ResponseWriter, r *http.Request) {
+	file, header, err := r.FormFile("fileKey")
+	if err != nil {
+		s.handleError(err, http.StatusBadRequest, w)
+	}
+
+	err = s.c.AddFile(r.Context(), header.Filename, file)
+	if err != nil {
+		s.handleError(err, http.StatusInternalServerError, w)
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleError(err error, status int, w http.ResponseWriter) {
+	s.logger.Error(err)
+	w.WriteHeader(status)
+
+	b, err := response.ParseResponse(err.Error(), true)
+	if err != nil {
+		s.logger.Error(err)
+	}
+
+	_, err = w.Write(b)
+	if err != nil {
+		s.logger.Error(err)
+	}
 }
 
 func (u User) toModel() model.User {
