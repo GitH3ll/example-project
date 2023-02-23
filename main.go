@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/GitH3ll/example-project/internal/config"
 	"github.com/GitH3ll/example-project/internal/repository"
@@ -8,10 +9,14 @@ import (
 	"github.com/GitH3ll/example-project/internal/service"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/sirupsen/logrus"
 )
 
 func main() {
+	ctx := context.Background()
+
 	logger := logrus.New()
 
 	cfg := &config.Config{}
@@ -29,6 +34,26 @@ func main() {
 		logger.Fatal(err)
 	}
 
+	minioClient, err := minio.New(cfg.Minio.Endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.Minio.KeyID, cfg.Minio.SecretKey, ""),
+		Secure: false,
+	})
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	ok, err := minioClient.BucketExists(ctx, cfg.Minio.Bucket)
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	if !ok {
+		err = minioClient.MakeBucket(context.Background(), cfg.Minio.Bucket, minio.MakeBucketOptions{})
+		if err != nil {
+			logger.Fatal(err)
+		}
+	}
+
 	userRepo := repository.NewUserRepo(db, cfg.DB)
 
 	err = userRepo.RunMigrations()
@@ -36,9 +61,9 @@ func main() {
 		logger.Warning(err)
 	}
 
-	controller := service.NewController(userRepo)
+	controller := service.NewController(userRepo, cfg, minioClient)
 
-	srv := server.NewServer(":8000", logger, controller)
+	srv := server.NewServer(":8000", logger, controller, cfg)
 	srv.RegisterRoutes()
 
 	srv.StartServer()

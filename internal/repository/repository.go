@@ -92,6 +92,32 @@ func (u *UserRepo) UpdateUser(ctx context.Context, modelUser model.User) error {
 	return nil
 }
 
+func (u *UserRepo) DeleteUser(ctx context.Context, id int64) error {
+	query := `DELETE FROM users where id = $1`
+
+	_, err := u.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	return nil
+}
+
+func (u *UserRepo) CheckAuth(ctx context.Context, login, password string) (model.User, error) {
+	query := `SELECT * FROM users WHERE login = $1 AND password = $2`
+
+	var us user
+
+	row := u.db.QueryRowxContext(ctx, query, login, password)
+
+	err := row.StructScan(&us)
+	if err != nil {
+		return model.User{}, fmt.Errorf("failed to scan struct user: %w", err)
+	}
+
+	return us.toModel(), nil
+}
+
 func convertUser(modelUser model.User) user {
 	return user{
 		ID:       modelUser.ID,
