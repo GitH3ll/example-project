@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/GitH3ll/example-project/internal/config"
+	"github.com/GitH3ll/example-project/internal/constants"
 	"github.com/GitH3ll/example-project/internal/middleware"
 	"github.com/GitH3ll/example-project/internal/model"
 	"github.com/GitH3ll/example-project/internal/response"
@@ -15,11 +17,12 @@ import (
 )
 
 type User struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	Login       string `json:"login"`
-	Password    string `json:"password"`
-	Description string `json:"description"`
+	ID          int      `json:"id"`
+	Name        string   `json:"name"`
+	Login       string   `json:"login"`
+	Password    string   `json:"password"`
+	Description string   `json:"description"`
+	ImageUrls   []string `json:"imageUrls,omitempty"`
 }
 
 type controller interface {
@@ -28,7 +31,7 @@ type controller interface {
 	UpdateUser(ctx context.Context, modelUser model.User) error
 	DeleteUser(ctx context.Context, id int64) error
 	Authorize(ctx context.Context, login, password string) (string, error)
-	AddFile(ctx context.Context, filename string, file io.Reader) error
+	AddFile(ctx context.Context, image model.Image) error
 }
 
 type Server struct {
@@ -54,7 +57,6 @@ func (s *Server) RegisterRoutes() {
 
 	s.r.Get("/user/auth", s.HandleAuthorize)
 	s.r.Post("/user/add", s.HandleAddUser)
-	s.r.Post("/image/add", s.HandleAddFile)
 
 	s.r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(s.cfg.JWTKeyword, s.logger))
@@ -62,6 +64,7 @@ func (s *Server) RegisterRoutes() {
 		r.Get("/user/{userID}", s.HandleGetUser)
 		r.Put("/user/update", s.HandleUpdateUser)
 		r.Delete("/user/{userID}", s.HandleDeleteUser)
+		r.Post("/image/add", s.HandleAddFile)
 	})
 }
 
@@ -78,6 +81,19 @@ func (s *Server) StartServer() {
 	}
 }
 
+// HandleAuthorize issues a JWT
+//
+//	@Summary      Authorize
+//	@Description  Issue JWT
+//	@Tags         auth
+//	@Accept       json
+//	@Produce      json
+//	@Param        user    body     User  true  "authorize user"
+//	@Success      200  {array}   response.Response
+//	@Failure      400  {object}  response.Response
+//	@Failure      404  {object}  response.Response
+//	@Failure      500  {object}  response.Response
+//	@Router       /user/auth [get]
 func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	var user User
 
@@ -114,6 +130,19 @@ func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleAddUser adds a new user
+//
+//	@Summary      AddUser
+//	@Description  add a new user
+//	@Tags         user
+//	@Accept       json
+//	@Produce      json
+//	@Param        user    body     User  true  "authorize user"
+//	@Success      200  {array}   response.Response
+//	@Failure      400  {object}  response.Response
+//	@Failure      404  {object}  response.Response
+//	@Failure      500  {object}  response.Response
+//	@Router       /user/add [post]
 func (s *Server) HandleAddUser(w http.ResponseWriter, r *http.Request) {
 	var user User
 
@@ -216,9 +245,22 @@ func (s *Server) HandleAddFile(w http.ResponseWriter, r *http.Request) {
 		s.handleError(err, http.StatusBadRequest, w)
 	}
 
-	err = s.c.AddFile(r.Context(), header.Filename, file)
+	defer file.Close()
+	userID, err := userIDFromCtx(r.Context())
 	if err != nil {
 		s.handleError(err, http.StatusInternalServerError, w)
+		return
+	}
+
+	err = s.c.AddFile(r.Context(), model.Image{
+		UserID:    userID,
+		Name:      header.Filename,
+		Data:      file,
+		Extension: ".jpg",
+	})
+	if err != nil {
+		s.handleError(err, http.StatusInternalServerError, w)
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -247,4 +289,15 @@ func (u User) toModel() model.User {
 		Login:       u.Login,
 		Password:    u.Password,
 	}
+}
+
+func userIDFromCtx(ctx context.Context) (int, error) {
+	idAny := ctx.Value(constants.IdCtxKey)
+
+	id, ok := idAny.(int)
+	if !ok {
+		return 0, fmt.Errorf("couldn't cast user id from context")
+	}
+
+	return id, nil
 }

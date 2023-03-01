@@ -4,15 +4,27 @@ import (
 	"context"
 	"fmt"
 	"github.com/GitH3ll/example-project/internal/config"
+	"github.com/GitH3ll/example-project/internal/filestore"
 	"github.com/GitH3ll/example-project/internal/repository"
 	"github.com/GitH3ll/example-project/internal/server"
 	"github.com/GitH3ll/example-project/internal/service"
+	"github.com/GitH3ll/example-project/internal/telegram"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/sirupsen/logrus"
 )
+
+// @title           Example Project API
+// @version         1.0
+// @description     Это API учебного проекта
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8000
+// @BasePath  /
 
 func main() {
 	ctx := context.Background()
@@ -54,17 +66,23 @@ func main() {
 		}
 	}
 
+	fileStore := filestore.NewMinio(minioClient, cfg.Minio.Bucket)
+
 	userRepo := repository.NewUserRepo(db, cfg.DB)
+
+	imageRepo := repository.NewImageRepo(db, cfg.DB)
 
 	err = userRepo.RunMigrations()
 	if err != nil {
 		logger.Warning(err)
 	}
 
-	controller := service.NewController(userRepo, cfg, minioClient)
+	controller := service.NewController(userRepo, imageRepo, cfg, fileStore)
 
 	srv := server.NewServer(":8000", logger, controller, cfg)
 	srv.RegisterRoutes()
+
+	go telegram.StartBot()
 
 	srv.StartServer()
 }

@@ -1,10 +1,20 @@
 package model
 
-// nolint: unused
+import "io"
+
 type User struct {
-	ID          int64
+	ID          int
 	Name        string
 	Login       string
 	Password    string
 	Description string
+	ImageUrls   []string
+}
+
+type Image struct {
+	ID        int
+	UserID    int
+	Name      string
+	Extension string
+	Data      io.Reader
 }
