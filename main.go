@@ -82,7 +82,12 @@ func main() {
 	srv := server.NewServer(":8000", logger, controller, cfg)
 	srv.RegisterRoutes()
 
-	go telegram.StartBot()
+	bot, err := telegram.NewBot(cfg.TgBot.APIKey, logger, controller)
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	go bot.StartBot()
 
 	srv.StartServer()
 }
