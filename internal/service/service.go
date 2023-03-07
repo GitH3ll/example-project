@@ -14,6 +14,8 @@ import (
 	"github.com/GitH3ll/example-project/internal/model"
 )
 
+//go:generate mockgen -source ./service.go -destination ../mock/service.go -package mock
+
 type repository interface {
 	AddUser(ctx context.Context, user model.User) error
 	GetUser(ctx context.Context, id int64) (model.User, error)
@@ -174,4 +176,12 @@ func (c *Controller) GetImageObjects(ctx context.Context, tgID int64) ([]io.Read
 	}
 
 	return objects, nil
+}
+
+func ForABenchmark() {
+	var nums []int
+
+	for i := 0; i < 1000000; i++ {
+		nums = append(nums, i)
+	}
 }

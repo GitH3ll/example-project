@@ -33,6 +33,7 @@ func Auth(keyword string, l *logrus.Logger) func(next http.Handler) http.Handler
 					l.Error(err)
 					return
 				}
+				return
 			}
 
 			idStr, err := token.Claims.GetIssuer()
